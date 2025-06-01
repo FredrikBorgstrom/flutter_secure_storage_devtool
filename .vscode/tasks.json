@@ -4,11 +4,6 @@
    "version": "2.0.0",
    "tasks": [
       {
-         "label": "echo",
-         "type": "shell",
-         "command": "echo Hello"
-      },
-      {
          "label": "build",
          "type": "shell",
          "command": "cd flutter_secure_storage_devtool_extension_web && dart run devtools_extensions build_and_copy --source=. --dest=../flutter_secure_storage_devtool/extension/devtools && cd .."

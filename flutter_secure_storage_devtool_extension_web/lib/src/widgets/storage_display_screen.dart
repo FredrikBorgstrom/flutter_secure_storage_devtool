@@ -1,6 +1,8 @@
-import 'package:devtools_extensions/api.dart';
+import 'dart:async';
+
 import 'package:devtools_extensions/devtools_extensions.dart';
 import 'package:flutter/material.dart';
+import 'package:vm_service/vm_service.dart' show Event;
 
 import '../models/secure_storage_data.dart';
 import '../services/storage_service.dart';
@@ -24,18 +26,30 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
   bool _hideNullValues = false;
   String _selectedDeviceId = '';
 
+  // VM service subscription for receiving events
+  StreamSubscription<Event>? _eventSubscription;
+  bool _acceptingMessages = false;
+  Timer? _acceptMessagesTimer;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadSettings();
-    _setupEventListeners();
+    _loadSettingsAndInitListener();
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
+    _acceptMessagesTimer?.cancel();
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSettingsAndInitListener() async {
+    await _loadSettings();
+    _acceptingMessages = !_clearOnReload;
+    _initServiceListener();
   }
 
   Future<void> _loadSettings() async {
@@ -47,43 +61,105 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
     });
   }
 
-  void _setupEventListeners() {
-    extensionManager.registerEventHandler(DevToolsExtensionEventType.unknown, (
-      event,
-    ) {
-      // Custom events are mapped to 'unknown' type, so we need to check the raw event
-      if (event.source != null && event.source!.contains('SecureStorage')) {
-        _handleStorageEvent(event.data as Map<String, dynamic>);
+  Future<void> _initServiceListener() async {
+    try {
+      print('🔧 Initializing VM service listener for SecureStorage...');
+      final vmService = await serviceManager.onServiceAvailable;
+
+      // Register our service with the VM service
+      await vmService.registerService(
+        'SecureStorage',
+        'ext.secure_storage.data',
+      );
+
+      print('✅ Registered SecureStorage service with VM service');
+
+      // Listen for extension events
+      _eventSubscription = vmService.onExtensionEvent.listen(
+        (event) {
+          print('📨 Received VM extension event:');
+          print('  - extensionKind: ${event.extensionKind}');
+          print('  - extensionData: ${event.extensionData}');
+
+          if (event.extensionKind == 'SecureStorage' ||
+              event.extensionKind == 'ext.secure_storage.data') {
+            print('✅ Processing SecureStorage event!');
+            _handleStorageEvent(event);
+          } else {
+            print('❌ Ignoring event with kind: ${event.extensionKind}');
+          }
+        },
+        onError: (error) {
+          print('❌ VM service event error: $error');
+        },
+        onDone: () {
+          print('🔚 VM service event stream closed');
+        },
+      );
+
+      // Set up acceptance timing
+      if (_clearOnReload) {
+        _acceptMessagesTimer?.cancel();
+        _acceptMessagesTimer = Timer(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _acceptingMessages = true;
+            print('✅ Now accepting SecureStorage messages');
+          }
+        });
+      } else {
+        _acceptingMessages = true;
+        print('✅ Accepting SecureStorage messages immediately');
       }
-    });
+
+      print('🚀 VM service listener initialized successfully');
+    } catch (e, stackTrace) {
+      print('❌ Error initializing VM service listener: $e');
+      print('Stack trace: $stackTrace');
+    }
   }
 
-  void _handleStorageEvent(Map<String, dynamic> data) {
-    final storageData = SecureStorageData.fromJson(data);
+  void _handleStorageEvent(Event event) {
+    if (!_acceptingMessages) {
+      print('⏳ Ignoring SecureStorage event (not accepting yet)');
+      return;
+    }
 
-    setState(() {
-      if (_clearOnReload && _storageDataList.isEmpty) {
-        // Clear the list if it's empty and clearOnReload is true
-        _storageDataList.clear();
+    try {
+      print('🔄 Processing SecureStorage event data...');
+      final data = event.extensionData?.data as Map<String, dynamic>?;
+      if (data == null) {
+        print('❌ No extension data found in event');
+        return;
       }
 
-      // Add the new data
-      if (_showNewestOnTop) {
-        _storageDataList.insert(0, storageData);
-      } else {
-        _storageDataList.add(storageData);
-      }
+      print('📦 Event data: $data');
+      final storageData = SecureStorageData.fromJson(data);
 
-      // Keep only the latest 100 entries
-      if (_storageDataList.length > 100) {
-        _storageDataList.removeLast();
-      }
+      setState(() {
+        if (_clearOnReload && _storageDataList.isEmpty) {
+          _storageDataList.clear();
+        }
 
-      // Set the selected device to the latest one if none is selected
-      if (_selectedDeviceId.isEmpty) {
-        _selectedDeviceId = storageData.deviceId;
-      }
-    });
+        if (_showNewestOnTop) {
+          _storageDataList.insert(0, storageData);
+        } else {
+          _storageDataList.add(storageData);
+        }
+
+        if (_storageDataList.length > 100) {
+          _storageDataList.removeLast();
+        }
+
+        if (_selectedDeviceId.isEmpty) {
+          _selectedDeviceId = storageData.deviceId;
+        }
+      });
+
+      print('✅ SecureStorage data added to UI!');
+    } catch (e, stackTrace) {
+      print('❌ Error processing SecureStorage event: $e');
+      print('Stack trace: $stackTrace');
+    }
   }
 
   void _updateSettings({

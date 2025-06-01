@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -37,15 +39,17 @@ class _MyHomePageState extends State<MyHomePage> {
   final _keyController = TextEditingController();
   final _valueController = TextEditingController();
   final Map<String, String> _values = {};
+  Timer? _monitoringTimer;
 
   @override
   void initState() {
     super.initState();
     _loadValues();
 
-    // Set up the DevTools listener
+    // Set up the DevTools listener using the improved real-time approach
     if (kDebugMode) {
-      registerSecureStorageListener(_storage);
+      _monitoringTimer = registerSecureStorageListener(_storage);
+      print('DevTools monitoring started with real-time listeners!');
     }
   }
 
@@ -53,6 +57,14 @@ class _MyHomePageState extends State<MyHomePage> {
   void dispose() {
     _keyController.dispose();
     _valueController.dispose();
+
+    // Clean up monitoring when disposing
+    if (kDebugMode && _monitoringTimer != null) {
+      _monitoringTimer!.cancel();
+      stopSecureStorageListener(_storage);
+      print('DevTools monitoring stopped');
+    }
+
     super.dispose();
   }
 
@@ -75,11 +87,26 @@ class _MyHomePageState extends State<MyHomePage> {
     _valueController.clear();
 
     await _loadValues();
+
+    // Note: With the new listener-based approach, the DevTools extension
+    // will automatically be notified of this change! No manual posting needed.
   }
 
   Future<void> _deleteValue(String key) async {
     await _storage.delete(key: key);
     await _loadValues();
+
+    // Note: The listener will automatically detect this deletion too!
+  }
+
+  Future<void> _manualSync() async {
+    // This demonstrates manual posting if you prefer more control
+    if (kDebugMode) {
+      await postSecureStorageToDevTools(_storage);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Manually synced to DevTools!')),
+      );
+    }
   }
 
   @override
@@ -88,12 +115,55 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
+        actions: [
+          if (kDebugMode)
+            IconButton(
+              icon: const Icon(Icons.sync),
+              tooltip: 'Manually sync to DevTools',
+              onPressed: _manualSync,
+            ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (kDebugMode) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.blue, size: 20),
+                        SizedBox(width: 8),
+                        Text(
+                          'DevTools Integration Active',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      'Real-time listeners are monitoring secure storage changes. '
+                      'All changes will automatically appear in the DevTools extension!',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
             const Text(
               'Add a new value:',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),

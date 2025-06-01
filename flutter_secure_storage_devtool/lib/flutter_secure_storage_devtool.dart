@@ -94,7 +94,17 @@ Future<void> postSecureStorageToDevTools(FlutterSecureStorage storage) async {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
 
+    // Try both approaches to ensure the extension receives the data
+    // Method 1: Use developer.postEvent (original approach)
     developer.postEvent(secureStorageDevToolsEventKind, messageData);
+
+    // Method 2: Use developer.log with structured data that can be parsed
+    developer.log(
+      'SECURE_STORAGE_DATA: ${messageData.toString()}',
+      name: secureStorageDevToolsEventKind,
+      time: DateTime.now(),
+    );
+
     developer.log(
       'Flutter Secure Storage DevTool: Data posted to DevTools with event kind: $secureStorageDevToolsEventKind',
       name: 'SecureStorageDevTool',
@@ -112,13 +122,17 @@ Future<void> postSecureStorageToDevTools(FlutterSecureStorage storage) async {
   }
 }
 
-/// Registers a listener for changes to Flutter Secure Storage and posts updates to DevTools.
+/// Registers listeners for changes to Flutter Secure Storage and posts updates to DevTools.
 ///
-/// This function sets up a listener that will detect changes to the secure storage
-/// and automatically post the updated data to the DevTools extension.
+/// This function sets up real-time listeners for all existing keys and automatically
+/// detects when new keys are added. Uses the native FlutterSecureStorage listener
+/// mechanism for immediate change detection.
 ///
 /// Args:
 ///   [storage]: The Flutter `FlutterSecureStorage` instance from your app.
+///   [recheckInterval]: How often to check for new keys (defaults to 5 seconds).
+///
+/// Returns a [StreamSubscription] that can be cancelled to stop monitoring.
 ///
 /// Example:
 /// ```dart
@@ -128,28 +142,111 @@ Future<void> postSecureStorageToDevTools(FlutterSecureStorage storage) async {
 /// void setupSecureStorageListener() {
 ///   final storage = FlutterSecureStorage();
 ///   if (kDebugMode) {
-///     registerSecureStorageListener(storage);
+///     final timer = registerSecureStorageListener(storage);
+///     // You can cancel monitoring later with: timer.cancel();
 ///   }
 /// }
 /// ```
-void registerSecureStorageListener(FlutterSecureStorage storage) {
-  if (!kDebugMode) return;
+Timer registerSecureStorageListener(
+  FlutterSecureStorage storage, {
+  Duration recheckInterval = const Duration(seconds: 5),
+}) {
+  if (!kDebugMode) {
+    // Return a dummy timer that does nothing
+    return Timer(Duration.zero, () {});
+  }
 
-  // Initial post of all values
-  postSecureStorageToDevTools(storage);
+  final Set<String> _monitoredKeys = <String>{};
 
-  // Set up a periodic check for changes (every 2 seconds)
-  // Note: Flutter Secure Storage doesn't have a built-in listener mechanism
-  // so we need to poll for changes
-  final timer = Timer.periodic(const Duration(seconds: 2), (timer) async {
-    await postSecureStorageToDevTools(storage);
+  // Helper function to post updates when any value changes
+  void _onStorageChange(String key, String? value) {
+    developer.log(
+      'Flutter Secure Storage DevTool: Key "$key" changed, posting update',
+      name: 'SecureStorageDevTool',
+    );
+    postSecureStorageToDevTools(storage);
+  }
+
+  // Helper function to register listeners for new keys
+  Future<void> _registerListenersForNewKeys() async {
+    try {
+      final allKeys = (await storage.readAll()).keys.toSet();
+      final newKeys = allKeys.difference(_monitoredKeys);
+
+      if (newKeys.isNotEmpty) {
+        developer.log(
+          'Flutter Secure Storage DevTool: Found ${newKeys.length} new keys: ${newKeys.join(", ")}',
+          name: 'SecureStorageDevTool',
+        );
+
+        for (final key in newKeys) {
+          storage.registerListener(
+            key: key,
+            listener: (value) => _onStorageChange(key, value),
+          );
+          _monitoredKeys.add(key);
+        }
+
+        // Post update when new keys are found
+        postSecureStorageToDevTools(storage);
+      }
+    } catch (e) {
+      developer.log(
+        'Error checking for new secure storage keys: $e',
+        name: 'SecureStorageDevTool',
+        error: e,
+      );
+    }
+  }
+
+  // Register listeners for all existing keys and post initial data
+  _registerListenersForNewKeys();
+
+  // Set up periodic check for new keys (much less frequent than polling all data)
+  final timer = Timer.periodic(recheckInterval, (timer) async {
+    await _registerListenersForNewKeys();
   });
 
-  // Store the timer in a way that it can be cancelled when needed
-  // This is a simple implementation - in a real app, you might want to
-  // provide a way to stop the listener
   developer.log(
-    'Flutter Secure Storage DevTool: Listener registered',
+    'Flutter Secure Storage DevTool: Real-time listeners registered (checking for new keys every ${recheckInterval.inSeconds}s)',
+    name: 'SecureStorageDevTool',
+  );
+
+  return timer;
+}
+
+/// Helper function to compare two maps for equality
+bool _mapsEqual(Map<String, String> map1, Map<String, String> map2) {
+  if (map1.length != map2.length) return false;
+
+  for (final key in map1.keys) {
+    if (!map2.containsKey(key) || map1[key] != map2[key]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/// Stops all listeners for secure storage monitoring.
+///
+/// This is a convenience function to clean up all listeners when you're done
+/// monitoring secure storage.
+///
+/// Args:
+///   [storage]: The Flutter `FlutterSecureStorage` instance to clean up.
+///
+/// Example:
+/// ```dart
+/// // When you're done monitoring
+/// stopSecureStorageListener(storage);
+/// ```
+void stopSecureStorageListener(FlutterSecureStorage storage) {
+  if (!kDebugMode) return;
+
+  storage.unregisterAllListeners();
+  developer.log(
+    'Flutter Secure Storage DevTool: All listeners stopped',
     name: 'SecureStorageDevTool',
   );
 }

@@ -1,0 +1,32 @@
+{
+   // See https://go.microsoft.com/fwlink/?LinkId=733558
+   // for the documentation about the tasks.json format
+   "version": "2.0.0",
+   "tasks": [
+      {
+         "label": "echo",
+         "type": "shell",
+         "command": "echo Hello"
+      },
+      {
+         "label": "build",
+         "type": "shell",
+         "command": "cd flutter_secure_storage_devtool_extension_web && dart run devtools_extensions build_and_copy --source=. --dest=../flutter_secure_storage_devtool/extension/devtools && cd .."
+      },
+      {
+         "label": "build with no PWA",
+         "type": "shell",
+         "command": "cd flutter_secure_storage_devtool_extension_web && flutter build web --csp -O0 --pwa-strategy=none && cp -r ./build/web/. ../flutter_secure_storage_devtool/extension/devtools/build && cd .."
+      },
+      {
+         "label": "build with sourcemaps",
+         "type": "shell",
+         "command": "cd flutter_secure_storage_devtool_extension_web && flutter build web --csp --source-maps --debug -O0 --pwa-strategy=none && cp -r ./build/web/. ../flutter_secure_storage_devtool/extension/devtools/build && cd .."
+      },
+      {
+         "label": "publish",
+         "type": "shell",
+         "command": "dart pub publish"
+      }
+   ]
+}

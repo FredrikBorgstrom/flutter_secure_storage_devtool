@@ -1,0 +1,29 @@
+name: flutter_secure_storage_devtool
+description: A Flutter DevTools extension that displays Flutter Secure Storage values in real-time for debugging
+version: 0.1.0
+homepage: https://github.com/yourusername/flutter_secure_storage_devtool
+repository: https://github.com/yourusername/flutter_secure_storage_devtool
+topics: [flutter, secure-storage, devtools, extension]
+
+environment:
+  sdk: ^3.0.0
+  flutter: ">=3.10.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_secure_storage: ^9.0.0
+  device_info_plus: ^11.3.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+  # This section identifies this package as a Flutter package
+  uses-material-design: true 

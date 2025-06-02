@@ -32,9 +32,10 @@ class StorageCard extends StatelessWidget {
     final entries = data.storageData.entries.toList();
 
     // Filter out null values if hideNullValues is true
-    final filteredEntries = hideNullValues
-        ? entries.where((entry) => entry.value != null).toList()
-        : entries;
+    final filteredEntries =
+        hideNullValues
+            ? entries.where((entry) => entry.value != null).toList()
+            : entries;
 
     if (filteredEntries.isEmpty) {
       return const Padding(
@@ -50,22 +51,23 @@ class StorageCard extends StatelessWidget {
           DataColumn(label: Text('Key')),
           DataColumn(label: Text('Value')),
         ],
-        rows: filteredEntries.map((entry) {
-          return DataRow(
-            cells: [
-              DataCell(Text(entry.key)),
-              DataCell(
-                Text(
-                  entry.value?.toString() ?? 'null',
-                  style: TextStyle(
-                    fontFamily: 'monospace',
-                    color: entry.value == null ? Colors.grey : null,
+        rows:
+            filteredEntries.map((entry) {
+              return DataRow(
+                cells: [
+                  DataCell(Text(entry.key)),
+                  DataCell(
+                    Text(
+                      entry.value?.toString() ?? 'null',
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        color: entry.value == null ? Colors.grey : null,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
-          );
-        }).toList(),
+                ],
+              );
+            }).toList(),
       ),
     );
   }

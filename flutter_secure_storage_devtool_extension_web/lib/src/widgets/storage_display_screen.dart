@@ -2,12 +2,12 @@ import 'dart:async';
 
 import 'package:devtools_extensions/devtools_extensions.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:vm_service/vm_service.dart' show Event;
 
 import '../models/secure_storage_data.dart';
 import '../services/storage_service.dart';
 import 'settings_tab.dart';
-import 'storage_card.dart';
 import 'storage_update_card.dart';
 
 /// The main screen for displaying Flutter Secure Storage data
@@ -238,6 +238,12 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
       });
 
       print('✅ SecureStorage update added to UI!');
+
+      // Also refresh the main data to keep All Data tab current
+      // Small delay to allow the host app to process the change
+      Timer(const Duration(milliseconds: 200), () {
+        _forceDataRefresh();
+      });
     } catch (e, stackTrace) {
       print('❌ Error processing SecureStorage update event: $e');
       print('Stack trace: $stackTrace');
@@ -385,13 +391,13 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
             ),
             const SizedBox(height: 8),
             const Text(
-              'This tab shows complete snapshots of your secure storage.',
+              'This tab shows all current key-value pairs in your secure storage.',
               style: TextStyle(fontSize: 14, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: () => _requestInitialData(),
+              onPressed: () => _forceDataRefresh(),
               icon: const Icon(Icons.refresh),
               label: const Text('Request Data'),
             ),
@@ -400,13 +406,278 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
       );
     }
 
-    // Show all data from all devices directly
-    return ListView.builder(
-      itemCount: _allDataList.length,
-      itemBuilder: (context, index) {
-        final data = _allDataList[index];
-        return StorageCard(data: data, hideNullValues: _hideNullValues);
-      },
+    // Get the most recent storage snapshot
+    final latestData = _showNewestOnTop ? _allDataList.first : _allDataList.last;
+    final entries = latestData.storageData.entries.toList();
+
+    // Filter out null values if hideNullValues is true
+    final filteredEntries =
+        _hideNullValues
+            ? entries.where((entry) => entry.value != null).toList()
+            : entries;
+
+    if (filteredEntries.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.storage_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'No storage data available',
+              style: TextStyle(fontSize: 18, color: Colors.grey),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Create some keys using the "Create Key" button above.',
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header with device info and key count
+        Container(
+          padding: const EdgeInsets.all(20.0),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Theme.of(context).primaryColor.withOpacity(0.1),
+                Theme.of(context).primaryColor.withOpacity(0.05),
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            border: Border(
+              bottom: BorderSide(
+                color: Theme.of(context).dividerColor,
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12.0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.storage,
+                  color: Theme.of(context).primaryColor,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          '${filteredEntries.length}',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.headlineMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).primaryColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          filteredEntries.length == 1
+                              ? 'Storage Key'
+                              : 'Storage Keys',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.device_hub,
+                          size: 16,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          latestData.deviceName,
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                        const SizedBox(width: 16),
+                        Icon(
+                          Icons.access_time,
+                          size: 16,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Updated ${_formatTimestamp(latestData.timestamp)}',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(color: Colors.grey[600]),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Data table
+        Expanded(
+          child: Card(
+            margin: const EdgeInsets.all(16.0),
+            elevation: 2,
+            child: SingleChildScrollView(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columnSpacing: 32.0,
+                  headingRowHeight: 56.0,
+                  dataRowHeight: 64.0,
+                  headingRowColor: MaterialStateProperty.resolveWith(
+                    (states) =>
+                        Theme.of(context).primaryColor.withOpacity(0.08),
+                  ),
+                  columns: const [
+                    DataColumn(
+                      label: Text(
+                        'Key',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Value',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Actions',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ],
+                  rows:
+                      filteredEntries.map((entry) {
+                        return DataRow(
+                          cells: [
+                            DataCell(
+                              Container(
+                                constraints: const BoxConstraints(
+                                  minWidth: 150,
+                                ),
+                                child: SelectableText(
+                                  entry.key,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontFamily: 'monospace',
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Container(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 400,
+                                  minWidth: 200,
+                                ),
+                                child: SelectableText(
+                                  entry.value?.toString() ?? 'null',
+                                  style: TextStyle(
+                                    fontFamily: 'monospace',
+                                    fontSize: 14,
+                                    color:
+                                        entry.value == null
+                                            ? Colors.grey[500]
+                                            : Theme.of(
+                                              context,
+                                            ).textTheme.bodyMedium?.color,
+                                    fontStyle:
+                                        entry.value == null
+                                            ? FontStyle.italic
+                                            : FontStyle.normal,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            DataCell(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Copy button
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.copy,
+                                      size: 20,
+                                      color: Colors.blue[600],
+                                    ),
+                                    tooltip: 'Copy value',
+                                    onPressed:
+                                        () => _copyValueToClipboard(
+                                          entry.key,
+                                          entry.value?.toString(),
+                                        ),
+                                  ),
+                                  // Edit button
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.edit,
+                                      size: 20,
+                                      color: Colors.orange[600],
+                                    ),
+                                    tooltip: 'Edit value',
+                                    onPressed:
+                                        () => _showEditKeyDialog(
+                                          entry.key,
+                                          entry.value?.toString(),
+                                        ),
+                                  ),
+                                  // Delete button
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete,
+                                      size: 20,
+                                      color: Colors.red[600],
+                                    ),
+                                    tooltip: 'Delete key',
+                                    onPressed:
+                                        () => _showDeleteKeyDialog(entry.key),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      }).toList(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -497,6 +768,7 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
 
   Future<void> _requestInitialData() async {
     try {
+      print('🔄 _requestInitialData called - starting data refresh...');
       final vmService = await serviceManager.onServiceAvailable;
 
       // Find the correct isolate that has our extensions
@@ -529,12 +801,16 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
         );
       }
 
-      await vmService.callServiceExtension(
+      print('📡 Calling ext.secure_storage.requestInitialData...');
+      final response = await vmService.callServiceExtension(
         'ext.secure_storage.requestInitialData',
         isolateId: targetIsolateId,
         args: <String, dynamic>{},
       );
-      print('📡 Manually requested initial storage data');
+
+      print('✅ Initial data request sent successfully');
+      print('📬 Response: ${response.json}');
+      print('🔄 Waiting for data to arrive via event stream...');
     } catch (e) {
       print('❌ Error requesting initial data: $e');
       if (mounted) {
@@ -547,6 +823,25 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
           ),
         );
       }
+    }
+  }
+
+  // Direct data refresh method that forces immediate UI update
+  Future<void> _forceDataRefresh() async {
+    print('🔄 Force data refresh initiated...');
+
+    // First request fresh data
+    await _requestInitialData();
+
+    // Wait a bit for the data to arrive
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    // If we still don't have updated data, try to manually trigger a refresh
+    if (mounted) {
+      print('🔄 Triggering setState to refresh UI...');
+      setState(() {
+        // This will trigger a rebuild of the widget tree
+      });
     }
   }
 
@@ -843,6 +1138,9 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
             backgroundColor: Colors.green,
           ),
         );
+
+        // Refresh data to show the empty state
+        await _forceDataRefresh();
       }
     } catch (e, stackTrace) {
       print('❌ Error sending delete all command: $e');
@@ -1000,6 +1298,9 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
             backgroundColor: Colors.green,
           ),
         );
+
+        // Refresh data to show the new key
+        await _forceDataRefresh();
       }
     } catch (e, stackTrace) {
       print('❌ Error sending create key command: $e');
@@ -1009,6 +1310,316 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to create key "$key": $e'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final diff = now.difference(timestamp);
+
+    if (diff.inDays > 0) {
+      return '${diff.inDays} day${diff.inDays > 1 ? 's' : ''} ago';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours} hour${diff.inHours > 1 ? 's' : ''} ago';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes} minute${diff.inMinutes > 1 ? 's' : ''} ago';
+    } else {
+      return 'just now';
+    }
+  }
+
+  void _copyValueToClipboard(String key, String? value) {
+    if (value != null) {
+      Clipboard.setData(ClipboardData(text: value));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Value copied to clipboard')),
+      );
+    }
+  }
+
+  void _showEditKeyDialog(String key, String? value) {
+    final newKeyController = TextEditingController(text: key);
+    final newValueController = TextEditingController(text: value);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.edit, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Edit Key'),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: newKeyController,
+                  decoration: const InputDecoration(
+                    labelText: 'Key',
+                    border: OutlineInputBorder(),
+                    hintText: 'Enter the new key name',
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Key cannot be empty';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: newValueController,
+                  decoration: const InputDecoration(
+                    labelText: 'Value',
+                    border: OutlineInputBorder(),
+                    hintText: 'Enter the new value',
+                  ),
+                  maxLines: 3,
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Value cannot be empty';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(context).pop();
+                  await _editStorageKey(
+                    newKeyController.text.trim(),
+                    newValueController.text.trim(),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _editStorageKey(String key, String value) async {
+    try {
+      print(
+        '🔑 Starting edit key command for key: "$key" with value: "$value"',
+      );
+      final vmService = await serviceManager.onServiceAvailable;
+
+      // Find the correct isolate that has our extensions
+      print('🔍 Finding isolate with command extension...');
+      final vm = await vmService.getVM();
+      String? targetIsolateId;
+
+      if (vm.isolates?.isNotEmpty == true) {
+        for (final isolateRef in vm.isolates!) {
+          try {
+            final isolateDetails = await vmService.getIsolate(isolateRef.id!);
+            final availableExtensions = isolateDetails.extensionRPCs ?? [];
+
+            if (availableExtensions.contains('ext.secure_storage.command')) {
+              targetIsolateId = isolateRef.id;
+              print('🎯 Found target isolate: ${isolateRef.id}');
+              break;
+            }
+          } catch (e) {
+            print('⚠️ Error checking isolate ${isolateRef.id}: $e');
+          }
+        }
+      }
+
+      if (targetIsolateId == null) {
+        throw Exception(
+          'No isolate found with ext.secure_storage.command extension',
+        );
+      }
+
+      // Send edit command
+      final commandData = {'operation': 'edit', 'key': key, 'value': value};
+
+      print(
+        '📡 Calling service extension: ext.secure_storage.command for edit',
+      );
+      final response = await vmService.callServiceExtension(
+        'ext.secure_storage.command',
+        isolateId: targetIsolateId,
+        args: commandData,
+      );
+
+      print('✅ Edit key command sent successfully!');
+      print('📬 Response: ${response.json}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Key "$key" updated successfully'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.orange,
+          ),
+        );
+
+        // Refresh data to show the updated values
+        await _forceDataRefresh();
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error sending edit key command: $e');
+      print('📚 Stack trace: $stackTrace');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update key "$key": $e'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showDeleteKeyDialog(String key) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.delete, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Confirm Deletion'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to delete the key "$key"?',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('This action cannot be undone.'),
+              const SizedBox(height: 8),
+              const Text(
+                'The key and its value will be permanently removed from secure storage.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.of(context).pop();
+                await _deleteStorageKey(key);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _deleteStorageKey(String key) async {
+    try {
+      print('🗑️ Starting delete key command for key: "$key"');
+      final vmService = await serviceManager.onServiceAvailable;
+
+      // Find the correct isolate that has our extensions
+      print('🔍 Finding isolate with command extension...');
+      final vm = await vmService.getVM();
+      String? targetIsolateId;
+
+      if (vm.isolates?.isNotEmpty == true) {
+        for (final isolateRef in vm.isolates!) {
+          try {
+            final isolateDetails = await vmService.getIsolate(isolateRef.id!);
+            final availableExtensions = isolateDetails.extensionRPCs ?? [];
+
+            if (availableExtensions.contains('ext.secure_storage.command')) {
+              targetIsolateId = isolateRef.id;
+              print('🎯 Found target isolate: ${isolateRef.id}');
+              break;
+            }
+          } catch (e) {
+            print('⚠️ Error checking isolate ${isolateRef.id}: $e');
+          }
+        }
+      }
+
+      if (targetIsolateId == null) {
+        throw Exception(
+          'No isolate found with ext.secure_storage.command extension',
+        );
+      }
+
+      // Send delete command
+      final commandData = {'operation': 'delete', 'key': key};
+
+      print(
+        '📡 Calling service extension: ext.secure_storage.command for delete',
+      );
+      final response = await vmService.callServiceExtension(
+        'ext.secure_storage.command',
+        isolateId: targetIsolateId,
+        args: commandData,
+      );
+
+      print('✅ Delete key command sent successfully!');
+      print('📬 Response: ${response.json}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Key "$key" deleted successfully'),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Refresh data to show the updated state
+        await _forceDataRefresh();
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error sending delete key command: $e');
+      print('📚 Stack trace: $stackTrace');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete key "$key": $e'),
             duration: const Duration(seconds: 4),
             backgroundColor: Colors.red,
           ),

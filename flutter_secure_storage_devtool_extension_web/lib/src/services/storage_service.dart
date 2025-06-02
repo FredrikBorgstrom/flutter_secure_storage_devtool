@@ -28,7 +28,7 @@ class StorageService {
         'clearOnReload': clearOnReload,
         'hideNullValues': hideNullValues,
       };
-    } catch (e, stackTrace) {
+    } catch (e) {
       // Return defaults
       return {
         'showNewestOnTop': false,
@@ -57,6 +57,6 @@ class StorageService {
         hideNullValuesKey,
         hideNullValues.toString(),
       );
-    } catch (e, stackTrace) {}
+    } catch (e) {}
   }
 }

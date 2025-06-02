@@ -1,5 +1,5 @@
 name: flutter_secure_storage_devtool
-description: A Flutter DevTools extension that displays Flutter Secure Storage values in real-time for debugging
+description: A Flutter DevTools extension that lets you view, edit, create and delete your Flutter Secure Storage
 version: 0.1.0
 homepage: https://github.com/yourusername/flutter_secure_storage_devtool
 repository: https://github.com/yourusername/flutter_secure_storage_devtool

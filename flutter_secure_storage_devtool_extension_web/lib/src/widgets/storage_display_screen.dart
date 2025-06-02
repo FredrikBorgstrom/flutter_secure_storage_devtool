@@ -21,11 +21,9 @@ class StorageDisplayScreen extends StatefulWidget {
 class _StorageDisplayScreenState extends State<StorageDisplayScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final List<SecureStorageData> _allDataList = [];
-  final List<SecureStorageUpdate> _updatesList = [];
+  List<SecureStorageData> _allDataList = [];
+  List<SecureStorageUpdate> _updatesList = [];
   bool _showNewestOnTop = false;
-  bool _clearOnReload = true;
-  bool _hideNullValues = false;
   String _selectedDeviceId = '';
 
   // VM service subscription for receiving events
@@ -37,6 +35,12 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+
+    // Always clear updates and data lists on app restart - ensure they never persist between sessions
+    _updatesList = [];
+    _allDataList = [];
+    print('🧹 Cleared updates and data lists on app restart');
+
     _loadSettingsAndInitListener();
   }
 
@@ -50,7 +54,10 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
 
   Future<void> _loadSettingsAndInitListener() async {
     await _loadSettings();
-    _acceptingMessages = !_clearOnReload;
+
+    // Initialize _acceptingMessages to false - this is key to prevent replayed events
+    _acceptingMessages = false;
+
     _initServiceListener();
   }
 
@@ -58,93 +65,54 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
     final settings = await StorageService.loadSettings();
     setState(() {
       _showNewestOnTop = settings['showNewestOnTop'] ?? false;
-      _clearOnReload = settings['clearOnReload'] ?? true;
-      _hideNullValues = settings['hideNullValues'] ?? false;
     });
   }
 
   Future<void> _initServiceListener() async {
     try {
-      print('🔧 Initializing VM service listener for SecureStorage...');
+      print('🔧 Initializing Extension event listener for SecureStorage...');
       final vmService = await serviceManager.onServiceAvailable;
 
-      // Register our services with the VM service
-      await vmService.registerService(
-        'SecureStorage',
-        'ext.secure_storage.data',
-      );
-      await vmService.registerService(
-        'SecureStorageUpdate',
-        'ext.secure_storage.update',
-      );
-
-      print('✅ Registered SecureStorage services with VM service');
-
-      // Listen for extension events
+      // Listen for Extension events (sent via developer.postEvent)
       _eventSubscription = vmService.onExtensionEvent.listen(
         (event) {
-          // print('📨 Received VM extension event:');
-          // print('  - extensionKind: ${event.extensionKind}');
-          // print('  - extensionData: ${event.extensionData}');
+          print('📨 Received Extension event:');
+          print('  - extensionKind: ${event.extensionKind}');
+          print('  - extensionData: ${event.extensionData}');
 
-          if (event.extensionKind == 'SecureStorage' ||
-              event.extensionKind == 'ext.secure_storage.data') {
-            // print('✅ Processing SecureStorage full data event!');
+          // Handle events based on the extension kind from developer.postEvent
+          if (event.extensionKind == 'SecureStorage') {
+            print('✅ Processing SecureStorage full data event!');
             _handleFullDataEvent(event);
-          } else if (event.extensionKind == 'SecureStorageUpdate' ||
-              event.extensionKind == 'ext.secure_storage.update') {
+          } else if (event.extensionKind == 'SecureStorageUpdate') {
             print('✅ Processing SecureStorageUpdate event!');
             _handleUpdateEvent(event);
           } else {
-            // print('❌ Ignoring event with kind: ${event.extensionKind}');
+            print('❌ Ignoring event with kind: ${event.extensionKind}');
           }
         },
         onError: (error) {
-          print('❌ VM service event error: $error');
+          print('❌ Extension event error: $error');
         },
         onDone: () {
-          print('🔚 VM service event stream closed');
+          print('🔚 Extension event stream closed');
         },
       );
 
-      // Always start accepting messages immediately for initial data
-      _acceptingMessages = true;
-      print('✅ Accepting SecureStorage messages immediately');
-
-      // Set up delayed acceptance for clearing on reload
-      if (_clearOnReload) {
-        _acceptMessagesTimer?.cancel();
-        _acceptMessagesTimer = Timer(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            // Clear data after a short delay, but keep accepting new messages
-            setState(() {
-              _allDataList.clear();
-              _updatesList.clear();
-            });
-            print('🧹 Cleared data after reload delay');
-          }
-        });
-      }
-
-      // Request initial data after a small delay to ensure extension is ready
-      Timer(const Duration(milliseconds: 200), () async {
-        try {
-          // Try to trigger initial data by calling a method that requests it
-          await vmService.callServiceExtension(
-            'ext.secure_storage.requestInitialData',
-            args: <String, dynamic>{},
-          );
-          print('📡 Requested initial storage data');
-        } catch (e) {
-          print(
-            'ℹ️ Could not request initial data (this is normal if the host app doesn\'t support it): $e',
-          );
+      // Start timer to delay accepting messages - this prevents processing replayed events
+      _acceptMessagesTimer?.cancel();
+      _acceptMessagesTimer = Timer(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          print('✅ Timer completed - now accepting SecureStorage messages');
+          _acceptingMessages = true;
         }
       });
 
-      print('🚀 VM service listener initialized successfully');
+      print(
+        '🚀 Extension event listener initialized - timer started for 500ms',
+      );
     } catch (e, stackTrace) {
-      print('❌ Error initializing VM service listener: $e');
+      print('❌ Error initializing Extension event listener: $e');
       print('Stack trace: $stackTrace');
     }
   }
@@ -167,11 +135,6 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
       final storageData = SecureStorageData.fromJson(data);
 
       setState(() {
-        // Only clear existing data if this is the first data and clearOnReload is true
-        if (_clearOnReload && _allDataList.isEmpty) {
-          _allDataList.clear();
-        }
-
         if (_showNewestOnTop) {
           _allDataList.insert(0, storageData);
         } else {
@@ -218,72 +181,144 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
       final updateData = SecureStorageUpdate.fromJson(data);
 
       setState(() {
-        if (_showNewestOnTop) {
-          _updatesList.insert(0, updateData);
-        } else {
-          _updatesList.add(updateData);
-        }
+        // Add update to the updates list based on sorting preference
+        _updatesList.add(updateData);
 
+        // Sort the updates list by timestamp
+        _updatesList.sort((a, b) {
+          if (_showNewestOnTop) {
+            return b.timestamp.compareTo(a.timestamp); // Newest first
+          } else {
+            return a.timestamp.compareTo(b.timestamp); // Oldest first
+          }
+        });
+
+        // Keep only the latest 100 updates
         if (_updatesList.length > 100) {
           if (_showNewestOnTop) {
-            _updatesList.removeLast();
+            _updatesList = _updatesList.take(100).toList();
           } else {
-            _updatesList.removeAt(0);
+            _updatesList =
+                _updatesList.skip(_updatesList.length - 100).toList();
           }
         }
 
         if (_selectedDeviceId.isEmpty) {
           _selectedDeviceId = updateData.deviceId;
         }
+
+        // Update the specific key in the All Data list WITHOUT doing a full refresh
+        if (_allDataList.isNotEmpty) {
+          // Find the most recent storage snapshot for the same device
+          final targetIndex = _allDataList.indexWhere(
+            (data) => data.deviceId == updateData.deviceId,
+          );
+
+          if (targetIndex != -1) {
+            // Create a new storage data object with the updated key-value
+            final existingData = _allDataList[targetIndex];
+            final updatedStorageMap = Map<String, dynamic>.from(
+              existingData.storageData,
+            );
+
+            switch (updateData.operation) {
+              case 'set':
+                // Set or update the key
+                updatedStorageMap[updateData.key] = updateData.value;
+                print(
+                  '🔑 Updated key "${updateData.key}" with value: ${updateData.value}',
+                );
+                break;
+              case 'delete':
+                // Remove the key
+                updatedStorageMap.remove(updateData.key);
+                print('🗑️ Deleted key "${updateData.key}"');
+                break;
+              case 'clear':
+                // Clear all data
+                updatedStorageMap.clear();
+                print('🧹 Cleared all storage data');
+                break;
+              case 'deleteAll':
+                // Clear all data (same as clear)
+                updatedStorageMap.clear();
+                print('🧹 Deleted all storage data');
+                break;
+              default:
+                print('❓ Unknown operation: ${updateData.operation}');
+                break;
+            }
+
+            // Create new storage data with updated timestamp
+            final updatedStorageData = SecureStorageData(
+              storageData: updatedStorageMap,
+              deviceId: existingData.deviceId,
+              deviceName: existingData.deviceName,
+              timestamp: updateData.timestamp,
+            );
+
+            // Replace the existing data
+            _allDataList[targetIndex] = updatedStorageData;
+            print('✅ Updated All Data list with specific key change');
+          } else {
+            print(
+              '⚠️ No existing data found for device ${updateData.deviceId}, skipping All Data update',
+            );
+          }
+        } else {
+          print('ℹ️ All Data list is empty, cannot update specific key');
+        }
       });
 
-      print('✅ SecureStorage update added to UI!');
-
-      // Also refresh the main data to keep All Data tab current
-      // Small delay to allow the host app to process the change
-      Timer(const Duration(milliseconds: 200), () {
-        _forceDataRefresh();
-      });
+      print('✅ SecureStorage update processed successfully!');
     } catch (e, stackTrace) {
       print('❌ Error processing SecureStorage update event: $e');
       print('Stack trace: $stackTrace');
     }
   }
 
-  void _updateSettings({
-    required bool showNewestOnTop,
-    required bool clearOnReload,
-    required bool hideNullValues,
-  }) {
+  void _updateSettings({required bool showNewestOnTop}) {
     setState(() {
       _showNewestOnTop = showNewestOnTop;
-      _clearOnReload = clearOnReload;
-      _hideNullValues = hideNullValues;
+
+      // Re-sort existing data when setting changes
+      _allDataList.sort((a, b) {
+        if (_showNewestOnTop) {
+          return b.timestamp.compareTo(a.timestamp);
+        } else {
+          return a.timestamp.compareTo(b.timestamp);
+        }
+      });
+
+      // Re-sort existing updates when setting changes
+      _updatesList.sort((a, b) {
+        if (_showNewestOnTop) {
+          return b.timestamp.compareTo(a.timestamp);
+        } else {
+          return a.timestamp.compareTo(b.timestamp);
+        }
+      });
     });
 
-    StorageService.saveSettings(
-      showNewestOnTop: showNewestOnTop,
-      clearOnReload: clearOnReload,
-      hideNullValues: hideNullValues,
-    );
+    StorageService.saveSettings(showNewestOnTop: showNewestOnTop);
   }
 
   void _clearAllData() {
     setState(() {
-      _allDataList.clear();
-      _updatesList.clear();
+      _allDataList = [];
+      _updatesList = [];
     });
   }
 
   void _clearStorageData() {
     setState(() {
-      _allDataList.clear();
+      _allDataList = [];
     });
   }
 
   void _clearUpdates() {
     setState(() {
-      _updatesList.clear();
+      _updatesList = [];
     });
   }
 
@@ -301,16 +336,6 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
           ],
         ),
         actions: [
-          // Test button for debugging VM service communication
-          TextButton(
-            onPressed: _testVMServiceCommunication,
-            child: const Text('Test VM Service'),
-          ),
-          // Diagnostic test button
-          TextButton(
-            onPressed: _testDiagnosticExtension,
-            child: const Text('Test Extensions'),
-          ),
           // Create Key button
           TextButton(
             onPressed: _showCreateKeyDialog,
@@ -368,8 +393,6 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
           // Settings Tab
           SettingsTab(
             showNewestOnTop: _showNewestOnTop,
-            clearOnReload: _clearOnReload,
-            hideNullValues: _hideNullValues,
             onSettingsChanged: _updateSettings,
           ),
         ],
@@ -407,30 +430,26 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
     }
 
     // Get the most recent storage snapshot
-    final latestData = _showNewestOnTop ? _allDataList.first : _allDataList.last;
+    final latestData =
+        _showNewestOnTop ? _allDataList.first : _allDataList.last;
     final entries = latestData.storageData.entries.toList();
 
-    // Filter out null values if hideNullValues is true
-    final filteredEntries =
-        _hideNullValues
-            ? entries.where((entry) => entry.value != null).toList()
-            : entries;
-
-    if (filteredEntries.isEmpty) {
+    if (entries.isEmpty) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.storage_outlined, size: 64, color: Colors.grey),
+            Icon(Icons.inbox, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
-              'No storage data available',
+              'No storage data available.',
               style: TextStyle(fontSize: 18, color: Colors.grey),
             ),
             SizedBox(height: 8),
             Text(
-              'Create some keys using the "Create Key" button above.',
+              'The secure storage appears to be empty.',
               style: TextStyle(fontSize: 14, color: Colors.grey),
+              textAlign: TextAlign.center,
             ),
           ],
         ),
@@ -481,7 +500,7 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
                     Row(
                       children: [
                         Text(
-                          '${filteredEntries.length}',
+                          '${entries.length}',
                           style: Theme.of(
                             context,
                           ).textTheme.headlineMedium?.copyWith(
@@ -491,9 +510,7 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          filteredEntries.length == 1
-                              ? 'Storage Key'
-                              : 'Storage Keys',
+                          entries.length == 1 ? 'Storage Key' : 'Storage Keys',
                           style: Theme.of(context).textTheme.titleLarge
                               ?.copyWith(fontWeight: FontWeight.w500),
                         ),
@@ -580,7 +597,7 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
                     ),
                   ],
                   rows:
-                      filteredEntries.map((entry) {
+                      entries.map((entry) {
                         return DataRow(
                           cells: [
                             DataCell(
@@ -713,6 +730,17 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
       deviceGroups[update.deviceId]!.add(update);
     }
 
+    // Sort updates within each device group according to the setting
+    for (final deviceUpdates in deviceGroups.values) {
+      deviceUpdates.sort((a, b) {
+        if (_showNewestOnTop) {
+          return b.timestamp.compareTo(a.timestamp);
+        } else {
+          return a.timestamp.compareTo(b.timestamp);
+        }
+      });
+    }
+
     // If no device is selected, select the first one
     if (_selectedDeviceId.isEmpty && deviceGroups.isNotEmpty) {
       _selectedDeviceId = deviceGroups.keys.first;
@@ -842,191 +870,6 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
       setState(() {
         // This will trigger a rebuild of the widget tree
       });
-    }
-  }
-
-  Future<void> _testVMServiceCommunication() async {
-    try {
-      print('🧪 Testing VM Service communication...');
-      final vmService = await serviceManager.onServiceAvailable;
-      print('✅ VM Service obtained for test');
-
-      // Get detailed information about available extensions
-      print('🔍 Getting VM and isolate information...');
-      final vm = await vmService.getVM();
-      print('📋 VM info: ${vm.name}, version: ${vm.version}');
-      print('📋 Number of isolates: ${vm.isolates?.length ?? 0}');
-
-      String? targetIsolateId;
-
-      if (vm.isolates?.isNotEmpty == true) {
-        for (int i = 0; i < vm.isolates!.length; i++) {
-          final isolateRef = vm.isolates![i];
-          print('📋 Isolate $i: ${isolateRef.name} (${isolateRef.id})');
-
-          try {
-            final isolateDetails = await vmService.getIsolate(isolateRef.id!);
-            final availableExtensions = isolateDetails.extensionRPCs ?? [];
-            print(
-              '🏷️ Isolate $i extensions (${availableExtensions.length}): $availableExtensions',
-            );
-
-            // Check specifically for our extensions
-            final hasTestComm = availableExtensions.contains(
-              'ext.secure_storage.testCommunication',
-            );
-            final hasCommand = availableExtensions.contains(
-              'ext.secure_storage.command',
-            );
-            final hasDiagnostic = availableExtensions.contains(
-              'ext.secure_storage.diagnostic',
-            );
-            final hasRequestData = availableExtensions.contains(
-              'ext.secure_storage.requestInitialData',
-            );
-
-            print('✅ Has testCommunication: $hasTestComm');
-            print('✅ Has command: $hasCommand');
-            print('✅ Has diagnostic: $hasDiagnostic');
-            print('✅ Has requestInitialData: $hasRequestData');
-
-            // If this isolate has our extensions, use it as the target
-            if (hasTestComm && hasCommand && hasDiagnostic && hasRequestData) {
-              targetIsolateId = isolateRef.id;
-              print(
-                '🎯 Found target isolate for our extensions: ${isolateRef.id}',
-              );
-            }
-          } catch (e) {
-            print('❌ Error getting isolate $i details: $e');
-          }
-        }
-      }
-
-      if (targetIsolateId == null) {
-        throw Exception('No isolate found with our secure storage extensions');
-      }
-
-      // Try the test communication with the correct isolate
-      try {
-        print(
-          '📡 Attempting to call ext.secure_storage.testCommunication on isolate $targetIsolateId...',
-        );
-        final response = await vmService.callServiceExtension(
-          'ext.secure_storage.testCommunication',
-          isolateId: targetIsolateId,
-          args: <String, dynamic>{},
-        );
-
-        print('✅ Test VM Service communication successful');
-        print('📬 Response: ${response.json}');
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('VM Service test successful: ${response.json}'),
-              duration: const Duration(seconds: 3),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        print('❌ Failed to call testCommunication: $e');
-
-        // Try calling a known Flutter extension to verify VM service works
-        try {
-          print('🔧 Testing with known Flutter extension on same isolate...');
-          final flutterResponse = await vmService.callServiceExtension(
-            'ext.flutter.debugPaint',
-            isolateId: targetIsolateId,
-            args: <String, dynamic>{},
-          );
-          print('✅ Flutter extension call successful: ${flutterResponse.json}');
-        } catch (flutterError) {
-          print('❌ Even Flutter extensions fail: $flutterError');
-        }
-
-        rethrow;
-      }
-    } catch (e, stackTrace) {
-      print('❌ Error testing VM Service communication: $e');
-      print('📚 Stack trace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('VM Service test failed: $e'),
-            duration: const Duration(seconds: 3),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _testDiagnosticExtension() async {
-    try {
-      print('🧪 Testing Extensions...');
-      final vmService = await serviceManager.onServiceAvailable;
-      print('✅ VM Service obtained for test');
-
-      // Find the correct isolate that has our extensions
-      print('🔍 Finding isolate with diagnostic extension...');
-      final vm = await vmService.getVM();
-      String? targetIsolateId;
-
-      if (vm.isolates?.isNotEmpty == true) {
-        for (final isolateRef in vm.isolates!) {
-          try {
-            final isolateDetails = await vmService.getIsolate(isolateRef.id!);
-            final availableExtensions = isolateDetails.extensionRPCs ?? [];
-
-            if (availableExtensions.contains('ext.secure_storage.diagnostic')) {
-              targetIsolateId = isolateRef.id;
-              print('🎯 Found target isolate: ${isolateRef.id}');
-              break;
-            }
-          } catch (e) {
-            print('⚠️ Error checking isolate ${isolateRef.id}: $e');
-          }
-        }
-      }
-
-      if (targetIsolateId == null) {
-        throw Exception(
-          'No isolate found with ext.secure_storage.diagnostic extension',
-        );
-      }
-
-      final response = await vmService.callServiceExtension(
-        'ext.secure_storage.diagnostic',
-        isolateId: targetIsolateId,
-        args: <String, dynamic>{},
-      );
-
-      print('✅ Test Extensions successful');
-      print('📬 Response: ${response.json}');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Extensions test successful: ${response.json}'),
-            duration: const Duration(seconds: 3),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e, stackTrace) {
-      print('❌ Error testing Extensions: $e');
-      print('📚 Stack trace: $stackTrace');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Extensions test failed: $e'),
-            duration: const Duration(seconds: 3),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
   }
 

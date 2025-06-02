@@ -3,20 +3,11 @@ import 'package:flutter/material.dart';
 /// A tab for managing extension settings
 class SettingsTab extends StatelessWidget {
   final bool showNewestOnTop;
-  final bool clearOnReload;
-  final bool hideNullValues;
-  final Function({
-    required bool showNewestOnTop,
-    required bool clearOnReload,
-    required bool hideNullValues,
-  })
-  onSettingsChanged;
+  final Function({required bool showNewestOnTop}) onSettingsChanged;
 
   const SettingsTab({
     super.key,
     required this.showNewestOnTop,
-    required this.clearOnReload,
-    required this.hideNullValues,
     required this.onSettingsChanged,
   });
 
@@ -37,47 +28,11 @@ class SettingsTab extends StatelessWidget {
           SwitchListTile(
             title: const Text('Show newest entries on top'),
             subtitle: const Text(
-              'When enabled, new storage data will appear at the top of the list',
+              'When enabled, new storage data and updates will appear at the top of the list',
             ),
             value: showNewestOnTop,
             onChanged: (value) {
-              onSettingsChanged(
-                showNewestOnTop: value,
-                clearOnReload: clearOnReload,
-                hideNullValues: hideNullValues,
-              );
-            },
-          ),
-
-          // Clear on reload setting
-          SwitchListTile(
-            title: const Text('Clear data on reload'),
-            subtitle: const Text(
-              'When enabled, all data will be cleared when the extension is reloaded',
-            ),
-            value: clearOnReload,
-            onChanged: (value) {
-              onSettingsChanged(
-                showNewestOnTop: showNewestOnTop,
-                clearOnReload: value,
-                hideNullValues: hideNullValues,
-              );
-            },
-          ),
-
-          // Hide null values setting
-          SwitchListTile(
-            title: const Text('Hide null values'),
-            subtitle: const Text(
-              'When enabled, null values will be hidden from the display',
-            ),
-            value: hideNullValues,
-            onChanged: (value) {
-              onSettingsChanged(
-                showNewestOnTop: showNewestOnTop,
-                clearOnReload: clearOnReload,
-                hideNullValues: value,
-              );
+              onSettingsChanged(showNewestOnTop: value);
             },
           ),
 

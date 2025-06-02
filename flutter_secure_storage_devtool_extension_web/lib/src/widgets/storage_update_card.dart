@@ -57,9 +57,17 @@ class StorageUpdateCard extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(8.0),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color:
+                      Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF292930)
+                          : Colors.grey[100],
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.grey[300]!),
+                  border: Border.all(
+                    color:
+                        Theme.of(context).brightness == Brightness.dark
+                            ? Colors.grey[600]!
+                            : Colors.grey[300]!,
+                  ),
                 ),
                 child: SelectableText(
                   update.value!,

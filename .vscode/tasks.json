@@ -21,7 +21,7 @@
       {
          "label": "publish",
          "type": "shell",
-         "command": "dart pub publish"
+         "command": "cd flutter_secure_storage_devtool && dart pub publish && cd .."
       }
    ]
 }

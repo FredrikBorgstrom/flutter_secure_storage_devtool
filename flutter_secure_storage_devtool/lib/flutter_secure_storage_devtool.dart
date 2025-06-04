@@ -421,10 +421,10 @@ Timer registerSecureStorageListener(
   // Register service extension for receiving commands from DevTools
   _registerCommandExtension();
 
-  final Set<String> _monitoredKeys = <String>{};
+  final Set<String> monitoredKeys = <String>{};
 
   // Helper function to post updates when any value changes
-  void _onStorageChange(String key, String? value) {
+  void onStorageChange(String key, String? value) {
     developer.log(
       'Flutter Secure Storage DevTool: Key "$key" changed, posting individual update',
       name: 'SecureStorageDevTool',
@@ -434,10 +434,10 @@ Timer registerSecureStorageListener(
   }
 
   // Helper function to register listeners for new keys
-  Future<void> _registerListenersForNewKeys() async {
+  Future<void> registerListenersForNewKeys() async {
     try {
       final allKeys = (await storage.readAll()).keys.toSet();
-      final newKeys = allKeys.difference(_monitoredKeys);
+      final newKeys = allKeys.difference(monitoredKeys);
 
       if (newKeys.isNotEmpty) {
         developer.log(
@@ -448,9 +448,9 @@ Timer registerSecureStorageListener(
         for (final key in newKeys) {
           storage.registerListener(
             key: key,
-            listener: (value) => _onStorageChange(key, value),
+            listener: (value) => onStorageChange(key, value),
           );
-          _monitoredKeys.add(key);
+          monitoredKeys.add(key);
         }
 
         // Post full data update when new keys are found
@@ -466,7 +466,7 @@ Timer registerSecureStorageListener(
   }
 
   // Register listeners for all existing keys and post initial data
-  _registerListenersForNewKeys();
+  registerListenersForNewKeys();
 
   // Post initial data after a short delay to ensure DevTools extension is ready
   Timer(const Duration(milliseconds: 300), () async {
@@ -487,7 +487,7 @@ Timer registerSecureStorageListener(
 
   // Set up periodic check for new keys (much less frequent than polling all data)
   final timer = Timer.periodic(recheckInterval, (timer) async {
-    await _registerListenersForNewKeys();
+    await registerListenersForNewKeys();
   });
 
   developer.log(
@@ -636,7 +636,7 @@ void _registerCommandExtension() {
 }
 
 /// Helper function to compare two maps for equality
-bool _mapsEqual(Map<String, String> map1, Map<String, String> map2) {
+/* bool _mapsEqual(Map<String, String> map1, Map<String, String> map2) {
   if (map1.length != map2.length) return false;
 
   for (final key in map1.keys) {
@@ -646,7 +646,7 @@ bool _mapsEqual(Map<String, String> map1, Map<String, String> map2) {
   }
 
   return true;
-}
+} */
 
 /// Stops all listeners for secure storage monitoring.
 ///

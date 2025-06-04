@@ -1,6 +1,6 @@
 name: flutter_secure_storage_devtool
 description: A Flutter DevTools extension that lets you view, edit, create and delete your Flutter Secure Storage
-version: 0.1.0
+version: 0.1.1
 homepage: https://github.com/yourusername/flutter_secure_storage_devtool
 repository: https://github.com/yourusername/flutter_secure_storage_devtool
 topics: [flutter, secure-storage, devtools, extension]
@@ -14,6 +14,7 @@ dependencies:
     sdk: flutter
   flutter_secure_storage: ^9.0.0
   device_info_plus: ^11.3.3
+  devtools_extensions: ^0.3.1
 
 dev_dependencies:
   flutter_test:

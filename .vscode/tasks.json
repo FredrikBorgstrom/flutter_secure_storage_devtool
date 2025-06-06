@@ -8,6 +8,16 @@
          "type": "shell",
          "command": "cd flutter_secure_storage_devtool_extension_web && dart run devtools_extensions build_and_copy --source=. --dest=../flutter_secure_storage_devtool/extension/devtools && cd .."
       },
+     /*  {
+         "label": "build-fast",
+         "type": "shell",
+         "command": "cd flutter_secure_storage_devtool_extension_web && flutter build web  --no-tree-shake-icons && cp -r ./build/web/. ../flutter_secure_storage_devtool/extension/devtools/build && cd .."
+      },
+      {
+         "label": "build-dev",
+         "type": "shell",
+         "command": "cd flutter_secure_storage_devtool_extension_web && flutter build web --debug --no-tree-shake-icons -O0 --pwa-strategy=none && cp -r ./build/web/. ../flutter_secure_storage_devtool/extension/devtools/build && cd .."
+      }, */
       {
          "label": "build with no PWA",
          "type": "shell",

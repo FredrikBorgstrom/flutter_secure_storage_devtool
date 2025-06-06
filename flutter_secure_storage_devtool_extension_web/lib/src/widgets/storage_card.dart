@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:devtools_extensions/devtools_extensions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -67,13 +69,7 @@ class StorageCard extends StatelessWidget {
                   DataCell(
                     Container(
                       constraints: const BoxConstraints(maxWidth: 300),
-                      child: SelectableText(
-                        entry.value?.toString() ?? 'null',
-                        style: TextStyle(
-                          fontFamily: 'monospace',
-                          color: entry.value == null ? Colors.grey : null,
-                        ),
-                      ),
+                      child: JsonValueWidget(value: entry.value?.toString()),
                     ),
                   ),
                   DataCell(
@@ -337,5 +333,199 @@ class StorageCard extends StatelessWidget {
         );
       }
     }
+  }
+}
+
+/// A widget that displays values with JSON expansion capability
+class JsonValueWidget extends StatefulWidget {
+  final String? value;
+
+  const JsonValueWidget({super.key, required this.value});
+
+  @override
+  State<JsonValueWidget> createState() => _JsonValueWidgetState();
+}
+
+class _JsonValueWidgetState extends State<JsonValueWidget> {
+  bool _isExpanded = false;
+  bool _isValidJson = false;
+  dynamic _parsedJson;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkIfValidJson();
+  }
+
+  void _checkIfValidJson() {
+    if (widget.value == null || widget.value!.trim().isEmpty) {
+      _isValidJson = false;
+      return;
+    }
+
+    try {
+      // Try to parse the value as JSON
+      _parsedJson = jsonDecode(widget.value!);
+      _isValidJson = true;
+    } catch (e) {
+      _isValidJson = false;
+      _parsedJson = null;
+    }
+  }
+
+  String _formatJson(dynamic jsonData) {
+    try {
+      const encoder = JsonEncoder.withIndent('  ');
+      return encoder.convert(jsonData);
+    } catch (e) {
+      return jsonData.toString();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.value == null) {
+      return const SelectableText(
+        'null',
+        style: TextStyle(fontFamily: 'monospace', color: Colors.grey),
+      );
+    }
+
+    if (!_isValidJson) {
+      return SelectableText(
+        widget.value!,
+        style: const TextStyle(fontFamily: 'monospace'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Clickable JSON area
+        InkWell(
+          onTap: () {
+            setState(() {
+              _isExpanded = !_isExpanded;
+            });
+          },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.blue[300]!, width: 1),
+              borderRadius: BorderRadius.circular(4),
+              color:
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Colors.blue[900]!.withValues(alpha: 0.1)
+                      : Colors.blue[50],
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.data_object, size: 16, color: Colors.blue[600]),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _isExpanded
+                        ? 'Click to hide formatted JSON'
+                        : widget.value!.length > 80
+                        ? '${widget.value!.substring(0, 80)}... (Click to view formatted JSON)'
+                        : '${widget.value!} (Click to view formatted)',
+                    style: TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _isExpanded ? Icons.expand_less : Icons.expand_more,
+                  size: 16,
+                  color: Colors.blue[600],
+                ),
+              ],
+            ),
+          ),
+        ),
+        // Expanded view - show formatted JSON
+        if (_isExpanded)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color:
+                  Theme.of(context).brightness == Brightness.dark
+                      ? Colors.grey[900]!
+                      : Colors.grey[50],
+              border: Border.all(
+                color:
+                    Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey[600]!
+                        : Colors.grey[300]!,
+              ),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with copy button
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.copy, size: 16),
+                      tooltip: 'Copy formatted JSON',
+                      onPressed: () async {
+                        try {
+                          await Clipboard.setData(
+                            ClipboardData(text: _formatJson(_parsedJson)),
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Formatted JSON copied to clipboard',
+                                ),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to copy: $e'),
+                                duration: const Duration(seconds: 2),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Formatted JSON display
+                Container(
+                  width: double.infinity,
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      _formatJson(_parsedJson),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
   }
 }

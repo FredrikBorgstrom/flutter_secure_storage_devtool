@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+Whenever the project needs to be built, either use the VS Code task "build" or run this command:
+"cd flutter_secure_storage_devtool_extension_web && dart run devtools_extensions build_and_copy --source=. --dest=../flutter_secure_storage_devtool/extension/devtools && cd .."

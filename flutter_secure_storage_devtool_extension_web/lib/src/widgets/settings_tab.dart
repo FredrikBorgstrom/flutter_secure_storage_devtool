@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../version.dart';
+
 /// A tab for managing extension settings
 class SettingsTab extends StatelessWidget {
   final bool showNewestOnTop;
@@ -46,9 +48,9 @@ class SettingsTab extends StatelessWidget {
             'Flutter Secure Storage DevTool',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          const Text(
-            'Version 0.1.0',
-            style: TextStyle(fontSize: 14, color: Colors.grey),
+          Text(
+            'Version $kExtensionVersion',
+            style: const TextStyle(fontSize: 14, color: Colors.grey),
           ),
           const SizedBox(height: 8),
           const Text(

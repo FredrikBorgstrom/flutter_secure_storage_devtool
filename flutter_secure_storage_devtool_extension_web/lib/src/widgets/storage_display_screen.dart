@@ -8,7 +8,7 @@ import 'package:vm_service/vm_service.dart' show Event;
 import '../models/secure_storage_data.dart';
 import '../services/storage_service.dart';
 import 'settings_tab.dart';
-import 'storage_update_card.dart';
+import 'storage_record_card.dart';
 
 /// The main screen for displaying Flutter Secure Storage data
 class StorageDisplayScreen extends StatefulWidget {
@@ -25,6 +25,10 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
   List<SecureStorageUpdate> _updatesList = [];
   bool _showNewestOnTop = false;
   String _selectedDeviceId = '';
+
+  // Track expanded records
+  Set<String> _expandedRecords = <String>{};
+  Set<String> _expandedUpdateRecords = <String>{};
 
   // VM service subscription for receiving events
   StreamSubscription<Event>? _eventSubscription;
@@ -342,6 +346,12 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
             style: TextButton.styleFrom(foregroundColor: Colors.green),
             child: const Text('Create Key'),
           ),
+          // Fetch All button
+          TextButton(
+            onPressed: _forceDataRefresh,
+            style: TextButton.styleFrom(foregroundColor: Colors.blue),
+            child: const Text('Fetch All'),
+          ),
           // Delete All button
           TextButton(
             onPressed: _showDeleteAllDialog,
@@ -465,8 +475,8 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                Theme.of(context).primaryColor.withOpacity(0.1),
-                Theme.of(context).primaryColor.withOpacity(0.05),
+                Theme.of(context).primaryColor.withValues(alpha: 0.1),
+                Theme.of(context).primaryColor.withValues(alpha: 0.05),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -483,7 +493,7 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
               Container(
                 padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor.withOpacity(0.1),
+                  color: Theme.of(context).primaryColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -551,147 +561,44 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
           ),
         ),
 
-        // Data table
+        // Storage records list
         Expanded(
-          child: Card(
-            margin: const EdgeInsets.all(16.0),
-            elevation: 2,
-            child: SingleChildScrollView(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columnSpacing: 32.0,
-                  headingRowHeight: 56.0,
-                  dataRowHeight: 64.0,
-                  headingRowColor: MaterialStateProperty.resolveWith(
-                    (states) =>
-                        Theme.of(context).primaryColor.withOpacity(0.08),
-                  ),
-                  columns: const [
-                    DataColumn(
-                      label: Text(
-                        'Key',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(8.0),
+            itemCount: entries.length,
+            itemBuilder: (context, index) {
+              final entry = entries[index];
+              final isExpanded = _expandedRecords.contains(entry.key);
+
+              return StorageRecordCard(
+                storageKey: entry.key,
+                value: entry.value?.toString(),
+                isExpanded: isExpanded,
+                onTap: () {
+                  setState(() {
+                    if (isExpanded) {
+                      _expandedRecords.remove(entry.key);
+                    } else {
+                      _expandedRecords.add(entry.key);
+                    }
+                  });
+                },
+                onCopy:
+                    () => _copyValueToClipboard(
+                      entry.key,
+                      entry.value?.toString(),
                     ),
-                    DataColumn(
-                      label: Text(
-                        'Value',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+                onEdit:
+                    () =>
+                        _showEditKeyDialog(entry.key, entry.value?.toString()),
+                onEditKey:
+                    () => _showRenameKeyDialog(
+                      entry.key,
+                      entry.value?.toString(),
                     ),
-                    DataColumn(
-                      label: Text(
-                        'Actions',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                  ],
-                  rows:
-                      entries.map((entry) {
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Container(
-                                constraints: const BoxConstraints(
-                                  minWidth: 150,
-                                ),
-                                child: SelectableText(
-                                  entry.key,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'monospace',
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              Container(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 400,
-                                  minWidth: 200,
-                                ),
-                                child: SelectableText(
-                                  entry.value?.toString() ?? 'null',
-                                  style: TextStyle(
-                                    fontFamily: 'monospace',
-                                    fontSize: 14,
-                                    color:
-                                        entry.value == null
-                                            ? Colors.grey[500]
-                                            : Theme.of(
-                                              context,
-                                            ).textTheme.bodyMedium?.color,
-                                    fontStyle:
-                                        entry.value == null
-                                            ? FontStyle.italic
-                                            : FontStyle.normal,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  // Copy button
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.copy,
-                                      size: 20,
-                                      color: Colors.blue[600],
-                                    ),
-                                    tooltip: 'Copy value',
-                                    onPressed:
-                                        () => _copyValueToClipboard(
-                                          entry.key,
-                                          entry.value?.toString(),
-                                        ),
-                                  ),
-                                  // Edit button
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.edit,
-                                      size: 20,
-                                      color: Colors.orange[600],
-                                    ),
-                                    tooltip: 'Edit value',
-                                    onPressed:
-                                        () => _showEditKeyDialog(
-                                          entry.key,
-                                          entry.value?.toString(),
-                                        ),
-                                  ),
-                                  // Delete button
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.delete,
-                                      size: 20,
-                                      color: Colors.red[600],
-                                    ),
-                                    tooltip: 'Delete key',
-                                    onPressed:
-                                        () => _showDeleteKeyDialog(entry.key),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                ),
-              ),
-            ),
+                onDelete: () => _showDeleteKeyDialog(entry.key),
+              );
+            },
           ),
         ),
       ],
@@ -777,6 +684,7 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
         // Updates list
         Expanded(
           child: ListView.builder(
+            padding: const EdgeInsets.all(8.0),
             itemCount:
                 deviceGroups.length > 1
                     ? (deviceGroups[_selectedDeviceId]?.length ?? 0)
@@ -786,7 +694,34 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
                   deviceGroups.length > 1
                       ? deviceGroups[_selectedDeviceId]![index]
                       : _updatesList[index];
-              return StorageUpdateCard(update: update);
+
+              // Create a unique key for each update record using timestamp and key
+              final updateKey =
+                  '${update.key}_${update.timestamp.millisecondsSinceEpoch}';
+              final isExpanded = _expandedUpdateRecords.contains(updateKey);
+
+              // Calculate the sequential index for this update
+              final sequentialIndex = index + 1;
+
+              return StorageRecordCard(
+                storageKey: update.key,
+                value: update.value,
+                isExpanded: isExpanded,
+                index: sequentialIndex,
+                operationType: update.operation,
+                onTap: () {
+                  setState(() {
+                    if (isExpanded) {
+                      _expandedUpdateRecords.remove(updateKey);
+                    } else {
+                      _expandedUpdateRecords.add(updateKey);
+                    }
+                  });
+                },
+                onCopy: () => _copyValueToClipboard(update.key, update.value),
+                onEdit: () => _showEditKeyDialog(update.key, update.value),
+                onDelete: () => _showDeleteKeyDialog(update.key),
+              );
             },
           ),
         ),
@@ -1344,6 +1279,85 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
     }
   }
 
+  void _showRenameKeyDialog(String oldKey, String? value) {
+    final newKeyController = TextEditingController(text: oldKey);
+    final formKey = GlobalKey<FormState>();
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.drive_file_rename_outline, color: Colors.purple),
+              SizedBox(width: 8),
+              Text('Rename Key'),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Current key: "$oldKey"',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'This will delete the old key and create a new one with the same value.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: newKeyController,
+                  decoration: const InputDecoration(
+                    labelText: 'New Key Name',
+                    border: OutlineInputBorder(),
+                    hintText: 'Enter the new key name',
+                  ),
+                  validator: (newValue) {
+                    if (newValue == null || newValue.trim().isEmpty) {
+                      return 'Key name cannot be empty';
+                    }
+                    if (newValue.trim() == oldKey) {
+                      return 'New key name must be different';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  Navigator.of(context).pop();
+                  await _renameStorageKey(
+                    oldKey,
+                    newKeyController.text.trim(),
+                    value,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Rename'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showDeleteKeyDialog(String key) {
     showDialog<void>(
       context: context,
@@ -1393,6 +1407,106 @@ class _StorageDisplayScreenState extends State<StorageDisplayScreen>
         );
       },
     );
+  }
+
+  Future<void> _renameStorageKey(
+    String oldKey,
+    String newKey,
+    String? value,
+  ) async {
+    try {
+      print('🔄 Starting rename key operation: "$oldKey" -> "$newKey"');
+
+      // Validate that we have a value to preserve
+      if (value == null) {
+        throw Exception('Cannot rename key: value is null');
+      }
+
+      // Step 1: Delete the old key
+      print('🗑️ Step 1: Deleting old key "$oldKey"');
+      final vmService = await serviceManager.onServiceAvailable;
+
+      // Find the correct isolate that has our extensions
+      print('🔍 Finding isolate with command extension...');
+      final vm = await vmService.getVM();
+      String? targetIsolateId;
+
+      if (vm.isolates?.isNotEmpty == true) {
+        for (final isolateRef in vm.isolates!) {
+          try {
+            final isolateDetails = await vmService.getIsolate(isolateRef.id!);
+            final availableExtensions = isolateDetails.extensionRPCs ?? [];
+
+            if (availableExtensions.contains('ext.secure_storage.command')) {
+              targetIsolateId = isolateRef.id;
+              print('🎯 Found target isolate: ${isolateRef.id}');
+              break;
+            }
+          } catch (e) {
+            print('⚠️ Error checking isolate ${isolateRef.id}: $e');
+          }
+        }
+      }
+
+      if (targetIsolateId == null) {
+        throw Exception(
+          'No isolate found with ext.secure_storage.command extension',
+        );
+      }
+
+      // Delete old key
+      final deleteCommandData = {'operation': 'delete', 'key': oldKey};
+      print('📡 Calling service extension for delete operation');
+      await vmService.callServiceExtension(
+        'ext.secure_storage.command',
+        isolateId: targetIsolateId,
+        args: deleteCommandData,
+      );
+      print('✅ Old key "$oldKey" deleted successfully');
+
+      // Step 2: Create the new key with the same value
+      print('🔑 Step 2: Creating new key "$newKey" with preserved value');
+      final createCommandData = {
+        'operation': 'edit',
+        'key': newKey,
+        'value': value,
+      };
+      print('📡 Calling service extension for create operation');
+      await vmService.callServiceExtension(
+        'ext.secure_storage.command',
+        isolateId: targetIsolateId,
+        args: createCommandData,
+      );
+      print('✅ New key "$newKey" created successfully');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Key renamed from "$oldKey" to "$newKey" successfully',
+            ),
+            duration: const Duration(seconds: 3),
+            backgroundColor: Colors.purple,
+          ),
+        );
+
+        // Refresh data to show the renamed key
+        await _forceDataRefresh();
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error during rename operation: $e');
+      print('📚 Stack trace: $stackTrace');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to rename key "$oldKey": $e'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _deleteStorageKey(String key) async {

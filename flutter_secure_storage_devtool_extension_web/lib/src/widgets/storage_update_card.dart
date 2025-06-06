@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../models/secure_storage_data.dart';
+import 'storage_card.dart';
 
 /// A card widget to display individual Flutter Secure Storage updates
 class StorageUpdateCard extends StatelessWidget {
@@ -69,10 +70,7 @@ class StorageUpdateCard extends StatelessWidget {
                             : Colors.grey[300]!,
                   ),
                 ),
-                child: SelectableText(
-                  update.value!,
-                  style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-                ),
+                child: JsonValueWidget(value: update.value),
               ),
             ],
 

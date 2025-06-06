@@ -28,6 +28,9 @@ FlutterSecureStorage? _globalStorageInstance;
 // Track which extensions have been registered to prevent double registration
 bool _extensionsRegistered = false;
 
+// Track monitored keys globally to ensure proper cleanup on restart
+Set<String> _globalMonitoredKeys = <String>{};
+
 /// Posts Flutter Secure Storage data to the Flutter Secure Storage DevTools extension.
 ///
 /// This function simplifies sending Flutter Secure Storage data from your application
@@ -206,8 +209,10 @@ Future<void> _handleStorageCommand(
             'Flutter Secure Storage DevTool: ✅ WRITE completed successfully for key "$key"',
             name: 'SecureStorageDevTool',
           );
-          // Post update to DevTools
+          // Post individual update first for immediate feedback
           postSecureStorageUpdateToDevTools(key, value, 'set');
+          // Also post all data to ensure the 'all data' view stays synchronized
+          postSecureStorageToDevTools(storage);
         } else {
           developer.log(
             'Flutter Secure Storage DevTool: ❌ Edit command missing value or key',
@@ -226,8 +231,10 @@ Future<void> _handleStorageCommand(
             'Flutter Secure Storage DevTool: ✅ DELETE completed successfully for key "$key"',
             name: 'SecureStorageDevTool',
           );
-          // Post update to DevTools
+          // Post individual update first for immediate feedback
           postSecureStorageUpdateToDevTools(key, null, 'delete');
+          // Also post all data to ensure the 'all data' view stays synchronized
+          postSecureStorageToDevTools(storage);
         } else {
           developer.log(
             'Flutter Secure Storage DevTool: ❌ Delete command missing key',
@@ -421,23 +428,45 @@ Timer registerSecureStorageListener(
   // Register service extension for receiving commands from DevTools
   _registerCommandExtension();
 
-  final Set<String> monitoredKeys = <String>{};
+  // Clear any existing listeners to ensure clean state on restart
+  // This is important to prevent duplicate listeners and ensure proper cleanup
+  try {
+    storage.unregisterAllListeners();
+    developer.log(
+      'Flutter Secure Storage DevTool: Cleared all existing listeners for clean restart',
+      name: 'SecureStorageDevTool',
+    );
+  } catch (e) {
+    developer.log(
+      'Flutter Secure Storage DevTool: Could not clear existing listeners: $e',
+      name: 'SecureStorageDevTool',
+    );
+  }
+
+  // Reset the global monitored keys set to ensure no stale data from previous sessions
+  _globalMonitoredKeys.clear();
+  developer.log(
+    'Flutter Secure Storage DevTool: Reset monitored keys set for clean restart',
+    name: 'SecureStorageDevTool',
+  );
 
   // Helper function to post updates when any value changes
   void onStorageChange(String key, String? value) {
     developer.log(
-      'Flutter Secure Storage DevTool: Key "$key" changed, posting individual update',
+      'Flutter Secure Storage DevTool: Key "$key" changed, posting individual update and refreshing all data',
       name: 'SecureStorageDevTool',
     );
-    // Post only the specific update instead of all data
+    // Post individual update first for immediate feedback
     postSecureStorageUpdateToDevTools(key, value, 'set');
+    // Also post all data to ensure the 'all data' view stays synchronized
+    postSecureStorageToDevTools(storage);
   }
 
   // Helper function to register listeners for new keys
   Future<void> registerListenersForNewKeys() async {
     try {
       final allKeys = (await storage.readAll()).keys.toSet();
-      final newKeys = allKeys.difference(monitoredKeys);
+      final newKeys = allKeys.difference(_globalMonitoredKeys);
 
       if (newKeys.isNotEmpty) {
         developer.log(
@@ -450,7 +479,7 @@ Timer registerSecureStorageListener(
             key: key,
             listener: (value) => onStorageChange(key, value),
           );
-          monitoredKeys.add(key);
+          _globalMonitoredKeys.add(key);
         }
 
         // Post full data update when new keys are found
@@ -468,8 +497,8 @@ Timer registerSecureStorageListener(
   // Register listeners for all existing keys and post initial data
   registerListenersForNewKeys();
 
-  // Post initial data after a short delay to ensure DevTools extension is ready
-  Timer(const Duration(milliseconds: 300), () async {
+  // Post initial data immediately (without delay)
+  Future<void> postInitialData() async {
     try {
       await postSecureStorageToDevTools(storage);
       developer.log(
@@ -483,6 +512,27 @@ Timer registerSecureStorageListener(
         error: e,
       );
     }
+  }
+
+  // Post initial data immediately
+  postInitialData();
+
+  // Also post after a short delay to ensure DevTools extension is ready (fallback)
+  Timer(const Duration(milliseconds: 300), () async {
+    await postInitialData();
+    developer.log(
+      'Flutter Secure Storage DevTool: Posted fallback initial data to DevTools',
+      name: 'SecureStorageDevTool',
+    );
+  });
+
+  // Post initial data after a longer delay as well (final fallback)
+  Timer(const Duration(milliseconds: 1000), () async {
+    await postInitialData();
+    developer.log(
+      'Flutter Secure Storage DevTool: Posted final fallback initial data to DevTools',
+      name: 'SecureStorageDevTool',
+    );
   });
 
   // Set up periodic check for new keys (much less frequent than polling all data)
@@ -596,19 +646,78 @@ void _registerCommandExtension() {
       'ext.secure_storage.requestInitialData',
       (method, parameters) async {
         developer.log(
-          'Flutter Secure Storage DevTool: Received initial data request - Method: $method, Parameters: $parameters',
+          'Flutter Secure Storage DevTool: 📡 Received initial data request - Method: $method, Parameters: $parameters',
           name: 'SecureStorageDevTool',
         );
 
         if (_globalStorageInstance != null) {
-          // Post initial data to DevTools
-          await postSecureStorageToDevTools(_globalStorageInstance!);
-          return developer.ServiceExtensionResponse.result(
-              '{"success": true, "message": "Initial data posted"}');
+          try {
+            // Post initial data to DevTools
+            await postSecureStorageToDevTools(_globalStorageInstance!);
+            developer.log(
+              'Flutter Secure Storage DevTool: ✅ Successfully posted initial data in response to request',
+              name: 'SecureStorageDevTool',
+            );
+            return developer.ServiceExtensionResponse.result(
+                '{"success": true, "message": "Initial data posted successfully"}');
+          } catch (e) {
+            developer.log(
+              'Flutter Secure Storage DevTool: ❌ Error posting initial data: $e',
+              name: 'SecureStorageDevTool',
+              error: e,
+            );
+            return developer.ServiceExtensionResponse.error(
+              3,
+              'Error posting initial data: $e',
+            );
+          }
         }
 
         developer.log(
-          'Flutter Secure Storage DevTool: No storage instance available for initial data request',
+          'Flutter Secure Storage DevTool: ❌ No storage instance available for initial data request',
+          name: 'SecureStorageDevTool',
+        );
+        return developer.ServiceExtensionResponse.error(
+          1,
+          'No storage instance available',
+        );
+      },
+    );
+
+    // Register refresh data handler (for manual data refresh)
+    developer.registerExtension(
+      'ext.secure_storage.refreshData',
+      (method, parameters) async {
+        developer.log(
+          'Flutter Secure Storage DevTool: 🔄 Received data refresh request - Method: $method, Parameters: $parameters',
+          name: 'SecureStorageDevTool',
+        );
+
+        if (_globalStorageInstance != null) {
+          try {
+            // Post fresh data to DevTools
+            await postSecureStorageToDevTools(_globalStorageInstance!);
+            developer.log(
+              'Flutter Secure Storage DevTool: ✅ Successfully refreshed data in response to manual request',
+              name: 'SecureStorageDevTool',
+            );
+            return developer.ServiceExtensionResponse.result(
+                '{"success": true, "message": "Data refreshed successfully"}');
+          } catch (e) {
+            developer.log(
+              'Flutter Secure Storage DevTool: ❌ Error refreshing data: $e',
+              name: 'SecureStorageDevTool',
+              error: e,
+            );
+            return developer.ServiceExtensionResponse.error(
+              3,
+              'Error refreshing data: $e',
+            );
+          }
+        }
+
+        developer.log(
+          'Flutter Secure Storage DevTool: ❌ No storage instance available for data refresh request',
           name: 'SecureStorageDevTool',
         );
         return developer.ServiceExtensionResponse.error(
@@ -666,8 +775,12 @@ void stopSecureStorageListener(FlutterSecureStorage storage) {
 
   storage.unregisterAllListeners();
   _globalStorageInstance = null;
+
+  // Clear the global monitored keys to ensure clean state
+  _globalMonitoredKeys.clear();
+
   developer.log(
-    'Flutter Secure Storage DevTool: All listeners stopped',
+    'Flutter Secure Storage DevTool: All listeners stopped and monitored keys cleared',
     name: 'SecureStorageDevTool',
   );
 }
@@ -692,6 +805,49 @@ void ensureServiceExtensionsRegistered() {
   );
 
   _registerCommandExtension();
+}
+
+/// Manually refreshes all secure storage data and posts it to DevTools.
+///
+/// This function is useful when you want to manually trigger a data refresh
+/// without waiting for automatic updates or listeners.
+///
+/// Args:
+///   [storage]: The Flutter `FlutterSecureStorage` instance from your app.
+///
+/// Example:
+/// ```dart
+/// import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+/// import 'package:flutter_secure_storage_devtool/flutter_secure_storage_devtool.dart';
+///
+/// void refreshStorageData() {
+///   final storage = FlutterSecureStorage();
+///   if (kDebugMode) {
+///     refreshSecureStorageData(storage);
+///   }
+/// }
+/// ```
+Future<void> refreshSecureStorageData(FlutterSecureStorage storage) async {
+  if (!kDebugMode) return;
+
+  developer.log(
+    'Flutter Secure Storage DevTool: 🔄 Manual data refresh requested',
+    name: 'SecureStorageDevTool',
+  );
+
+  try {
+    await postSecureStorageToDevTools(storage);
+    developer.log(
+      'Flutter Secure Storage DevTool: ✅ Manual data refresh completed successfully',
+      name: 'SecureStorageDevTool',
+    );
+  } catch (e) {
+    developer.log(
+      'Flutter Secure Storage DevTool: ❌ Error during manual data refresh: $e',
+      name: 'SecureStorageDevTool',
+      error: e,
+    );
+  }
 }
 
 /// Diagnostic function to test if service extensions are working

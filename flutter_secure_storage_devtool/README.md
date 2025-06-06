@@ -2,6 +2,13 @@
 
 A powerful DevTools extension for monitoring and managing Flutter Secure Storage in real-time during development.
 
+| View all stored data                                              | View live updates of your data                           |
+|------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| ![All Data View](screenshots/all_data_view.png) | ![Updates View](screenshots/updates_view.png) |
+
+| Create new key dialog                                             | Delete all data dialog                         |
+|------------------------------------------------------------------------------|---------------------------------------------------------------------------|
+| ![Create new key dialog](screenshots/create_new_key.png) | ![Updates View](screenshots/delete_all.png) |
 ## ✨ Features
 
 ### 📊 **Real-time Monitoring**

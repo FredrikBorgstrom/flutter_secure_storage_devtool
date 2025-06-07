@@ -5,3 +5,13 @@ alwaysApply: false
 ---
 Whenever the project needs to be built, either use the VS Code task "build" or run this command:
 "cd flutter_secure_storage_devtool_extension_web && dart run devtools_extensions build_and_copy --source=. --dest=../flutter_secure_storage_devtool/extension/devtools && cd .."
+
+When project version should be increased, do the following:
+
+run "dart update_version.dart <version>" where <version> should be replaced by the specific version
+
+Update the changelog, and if the changes contains new features then add them to the readme.
+
+Run the VS Code script "build" or the command "cd flutter_secure_storage_devtool_extension_web && dart run devtools_extensions build_and_copy --source=. --dest=../flutter_secure_storage_devtool/extension/devtools && cd .."
+
+Finally run the VS Code script "publish" or the command "cd flutter_secure_storage_devtool && dart pub publish && cd .."

@@ -4,11 +4,11 @@ A powerful DevTools extension for monitoring and managing Flutter Secure Storage
 
 | View all stored data                                              | View live updates of your data                           |
 |------------------------------------------------------------------------------|---------------------------------------------------------------------------|
-| ![All Data View](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/all_data_view.png) | ![Updates View](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/updates_view.png) |
+| ![All Data View](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_secure_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/all_data_view.png) | ![Updates View](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_secure_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/updates_view.png) |
 
 | Create new key dialog                                             | Delete all data dialog                         |
 |------------------------------------------------------------------------------|---------------------------------------------------------------------------|
-| ![Create new key dialog](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/create_new_key.png) | ![Updates View](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/delete_all.png) |
+| ![Create new key dialog](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_secure_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/create_new_key.png) | ![Updates View](https://raw.githubusercontent.com/FredrikBorgstrom/flutter_secure_storage_devtool/b9af4d88c7dd74996bf0d71a3e75144334a0797f/flutter_secure_storage_devtool/screenshots/delete_all.png) |
 ## ✨ Features
 
 ### 📊 **Real-time Monitoring**

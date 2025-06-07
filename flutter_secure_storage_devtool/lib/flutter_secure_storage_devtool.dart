@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:io' show Platform;
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+// Use conditional imports to support Web and WASM compatibility
+import 'platform/platform.dart';
 
 /// The event kind used to send Flutter Secure Storage data to the DevTools extension.
 ///

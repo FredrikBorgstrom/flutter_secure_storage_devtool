@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0
+
+* **NEW:** Added Web and WASM platform compatibility
+  - Implemented conditional imports to support Web and WASM compilation
+  - Added platform-specific implementations for secure cross-platform operation
+  - Package now supports all Flutter platforms: iOS, Android, Web, Windows, macOS, Linux
+* **IMPROVED:** Updated dependencies for better compatibility
+  - Updated `flutter_secure_storage` to `^9.2.0` for listener functionality support
+  - Updated `devtools_extensions` to `^0.4.0` for latest DevTools features
+  - Fixed lower bound dependency compatibility issues
+* **IMPROVED:** Enhanced pub.dev scoring
+  - Resolved platform support issues that were affecting pub.dev scoring
+  - Fixed dependency constraint lower bounds compatibility
+  - Package now receives full points for platform support and dependency management
+
 ## 0.2.0
 
 * **NEW:** Added JSON value expansion and formatting

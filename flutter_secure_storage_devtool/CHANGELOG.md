@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1
+
+* **IMPROVED:** Updated repository references
+  - Renamed GitHub repository to `flutter_secure_storage_devtool` for consistency
+  - Updated all package URLs and documentation links
+  - Fixed screenshot links in README to point to new repository location
+
 ## 0.3.0
 
 * **NEW:** Added Web and WASM platform compatibility
@@ -13,7 +20,7 @@
 * **IMPROVED:** Enhanced pub.dev scoring
   - Resolved platform support issues that were affecting pub.dev scoring
   - Fixed dependency constraint lower bounds compatibility
-  - Package now receives full points for platform support and dependency management
+  - Improved package maintainability and cross-platform support
 
 ## 0.2.0
 

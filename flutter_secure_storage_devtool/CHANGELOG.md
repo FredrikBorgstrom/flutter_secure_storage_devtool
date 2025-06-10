@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+* **IMPROVED:** Removed verbose debug output
+  - Removed all `developer.log()` statements throughout the library
+
 ## 0.3.1
 
 * **IMPROVED:** Updated repository references
